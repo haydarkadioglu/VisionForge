@@ -441,21 +441,26 @@ input, select {
 
 .camera-stage {
   margin-top: 18px;
-  display: grid;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   gap: 12px;
-  align-items: start;
+  min-height: 240px;
 }
 
 #webcam-video,
 #inference-canvas {
-  width: 100%;
+  width: min(100%, 920px);
   max-width: 100%;
+  max-height: 72vh;
   min-height: 220px;
+  height: auto;
   border-radius: 16px;
   background: rgba(2, 11, 19, 0.9);
   border: 1px solid var(--border);
   object-fit: contain;
   display: block;
+  margin: 0 auto;
 }
 
 #webcam-video {
