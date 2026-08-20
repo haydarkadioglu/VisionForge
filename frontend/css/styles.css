@@ -419,6 +419,45 @@ input, select {
   margin-bottom: 4px;
 }
 
+.inference-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.inference-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.file-picker-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.camera-stage {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+#webcam-video,
+#inference-canvas {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 16px;
+  background: rgba(2, 11, 19, 0.9);
+  border: 1px solid var(--border);
+}
+
+#webcam-video {
+  display: none;
+}
+
 @media (max-width: 960px) {
   .app-shell {
     flex-direction: column;

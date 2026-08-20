@@ -1,18 +1,73 @@
 from __future__ import annotations
 
+import base64
+import re
+import time
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
 from .annotation_manager import AnnotationManager
-from .config import DATASET_DIR, EXPORT_DIR, FRONTEND_DIR, MODEL_DIR, RUN_DIR
+from .config import BASE_DIR, DATASET_DIR, EXPORT_DIR, FRONTEND_DIR, MODEL_DIR, RUN_DIR
 from .dataset_manager import ensure_yaml_for_dataset, list_registered_datasets, scan_dataset
 from .device_manager import detect_device
-from .model_manager import download_model, list_models
+from .model_manager import download_model, get_model_by_id, list_models
 from .trainer import training_service
 
 app = Flask(__name__, static_folder=str(FRONTEND_DIR), static_url_path="")
 annotation_manager = AnnotationManager(DATASET_DIR)
+
+
+def _resolve_inference_model(model_id: str | None, model_path: str | None = None) -> str:
+    if model_path:
+        candidate = Path(model_path).expanduser()
+        if not candidate.exists() and not candidate.is_absolute() and candidate.parent == Path('.'):
+            for alternate_root in (MODEL_DIR, BASE_DIR):
+                alternate = alternate_root / candidate.name
+                if alternate.exists():
+                    return str(alternate)
+                if candidate.suffix == '':
+                    fallback = alternate_root / f"{candidate.name}.pt"
+                    if fallback.exists():
+                        return str(fallback)
+        if candidate.exists():
+            return str(candidate)
+        raise FileNotFoundError(f"Model file not found: {candidate}")
+
+    if model_id:
+        model = get_model_by_id(model_id)
+        if model:
+            candidate = Path(model["local_path"]).expanduser()
+            return str(candidate)
+
+    default_path = MODEL_DIR / "yolov8n.pt"
+    return str(default_path)
+
+
+def _decode_data_url(data_url: str, suffix: str) -> str:
+    match = re.match(r"data:.*?;base64,(.*)", data_url)
+    if not match:
+        raise ValueError("Invalid base64 data URL")
+
+    encoded = match.group(1)
+    payload = base64.b64decode(encoded)
+    target_dir = EXPORT_DIR / "live"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / f"inference_{int(time.time() * 1000)}.{suffix}"
+    target_path.write_bytes(payload)
+    return str(target_path)
+
+
+def _normalize_inference_classes(model, classes):
+    if not classes:
+        return None
+
+    names = getattr(model, "names", {}) or {}
+    selected = set()
+    for index, label in names.items():
+        if str(label) in classes:
+            selected.add(int(index))
+    return sorted(selected) if selected else None
 
 
 @app.route("/")
@@ -50,6 +105,21 @@ def download_selected_model():
         return jsonify({"result": result})
     except Exception as exc:  # pragma: no cover - runtime dependency specific
         return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/models/load", methods=["POST"])
+def load_selected_model():
+    payload = request.get_json(silent=True) or {}
+    model_id = payload.get("model_id") or "yolov8n"
+    model_path = payload.get("model_path")
+
+    try:
+        resolved_path = _resolve_inference_model(model_id, model_path)
+        if not Path(resolved_path).exists():
+            raise FileNotFoundError(f"Model file not found: {resolved_path}")
+        return jsonify({"status": "loaded", "model_id": model_id, "model_path": resolved_path})
+    except Exception as exc:  # pragma: no cover - optional dependency guard
+        return jsonify({"error": str(exc)}), 400
 
 
 @app.route("/api/datasets", methods=["GET"])
@@ -139,21 +209,75 @@ def training_status():
 @app.route("/api/inference", methods=["POST"])
 def inference_preview():
     payload = request.get_json(silent=True) or {}
-    classes = payload.get("classes") or ["person", "vehicle"]
+    classes = payload.get("classes") or []
     confidence = float(payload.get("confidence", 0.25))
-    image_path = payload.get("image_path") or "demo/sample.jpg"
-    return jsonify({
-        "status": "ready",
-        "classes": classes,
-        "confidence": confidence,
-        "result": {
-            "image_path": image_path,
-            "detections": [
-                {"label": classes[0], "confidence": 0.93, "bbox": [120, 80, 300, 260]},
-                {"label": classes[-1], "confidence": 0.88, "bbox": [280, 150, 520, 360]},
-            ],
-        },
-    })
+    model_id = payload.get("model_id") or "yolov8n"
+    model_path = payload.get("model_path")
+    source_type = payload.get("source_type", "image")
+
+    try:
+        source = payload.get("image_path")
+        if payload.get("image_data"):
+            source = _decode_data_url(payload["image_data"], "jpg")
+        elif payload.get("video_data"):
+            source = _decode_data_url(payload["video_data"], "mp4")
+        elif payload.get("video_path"):
+            source = payload["video_path"]
+
+        if not source:
+            source = payload.get("image_path") or "demo/sample.jpg"
+
+        resolved_model = _resolve_inference_model(model_id, model_path)
+        if not Path(resolved_model).exists():
+            raise FileNotFoundError(f"Model file not found: {resolved_model}")
+
+        from ultralytics import YOLO
+
+        model = YOLO(resolved_model)
+        selected_classes = _normalize_inference_classes(model, classes)
+        predict_kwargs = {
+            "source": source,
+            "conf": confidence,
+            "iou": 0.45,
+            "verbose": False,
+            "project": str(RUN_DIR),
+            "name": "inference-live",
+            "exist_ok": True,
+        }
+        if selected_classes is not None:
+            predict_kwargs["classes"] = selected_classes
+
+        results = model.predict(**predict_kwargs)
+        detections = []
+        for result in results:
+            boxes = getattr(result, "boxes", None)
+            if boxes is None:
+                continue
+            for box in boxes:
+                coords = box.xyxy[0].tolist()
+                x1, y1, x2, y2 = [float(value) for value in coords]
+                label_index = int(box.cls[0].item())
+                label_name = result.names.get(label_index, str(label_index))
+                detections.append({
+                    "label": label_name,
+                    "confidence": round(float(box.conf[0].item()), 3),
+                    "bbox": [round(x1, 2), round(y1, 2), round(max(x2 - x1, 0.0), 2), round(max(y2 - y1, 0.0), 2)],
+                })
+
+        return jsonify({
+            "status": "ready",
+            "source_type": source_type,
+            "classes": classes,
+            "confidence": confidence,
+            "model_path": resolved_model,
+            "result": {
+                "image_path": source,
+                "detections": detections,
+                "total_detections": len(detections),
+            },
+        })
+    except Exception as exc:  # pragma: no cover - optional runtime dependency guard
+        return jsonify({"error": str(exc), "status": "failed"}), 400
 
 
 @app.route("/api/export", methods=["GET"])

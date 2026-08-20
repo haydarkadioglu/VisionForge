@@ -3,6 +3,7 @@ const state = {
   models: [],
   datasets: [],
   currentJobId: null,
+  webcamTimer: null,
 };
 
 function setStatusText(text) {
@@ -116,6 +117,17 @@ function populateModelSelect(models) {
   select.innerHTML = models.map((model) => `<option value="${model.id}">${model.name}</option>`).join('');
 }
 
+function populateInferenceModelSelect(models) {
+  const select = document.getElementById('inference-model-select');
+  if (!select) return;
+
+  select.innerHTML = models.map((model) => `<option value="${model.id}">${model.name}</option>`).join('');
+  const customPath = document.getElementById('custom-model-path');
+  if (customPath && !customPath.value) {
+    customPath.value = 'data/models/yolov8n.pt';
+  }
+}
+
 function renderTrainingState(stateData) {
   const container = document.getElementById('training-state');
   if (!container) return;
@@ -194,17 +206,169 @@ function renderClassFilters() {
   `).join('');
 }
 
-async function runDetection() {
-  const selected = [...document.querySelectorAll('#class-filters input:checked')].map((input) => input.parentElement.querySelector('span').textContent);
-  const response = await runInference({ classes: selected, confidence: 0.25 });
+function renderInferenceResults(response) {
   const results = document.getElementById('inference-results');
-  const detections = (response.result?.detections || []).map((item) => `
+  if (!results) return;
+
+  const detections = (response?.result?.detections || []).map((item) => `
     <div class="detection-box">
       <strong>${item.label}</strong>
-      <span>Confidence: ${(item.confidence * 100).toFixed(0)}%</span>
+      <span>Confidence: ${(Number(item.confidence || 0) * 100).toFixed(0)}%</span>
+      <span>Box: ${JSON.stringify(item.bbox || [])}</span>
     </div>
   `).join('');
+
   results.innerHTML = detections || '<p>No detections for the selected classes.</p>';
+}
+
+function drawDetectionsOnCanvas(detections) {
+  const canvas = document.getElementById('inference-canvas');
+  const ctx = canvas?.getContext('2d');
+  if (!canvas || !ctx) return;
+
+  const image = document.getElementById('webcam-video');
+  if (image && image.readyState >= 2) {
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  }
+
+  detections.forEach((item) => {
+    const [x, y, width, height] = item.bbox || [0, 0, 0, 0];
+    ctx.strokeStyle = '#61dafb';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, width, height);
+    ctx.fillStyle = '#61dafb';
+    ctx.font = '14px sans-serif';
+    ctx.fillText(item.label, x + 6, y + 18);
+  });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function loadCustomModel() {
+  const modelId = document.getElementById('inference-model-select')?.value || 'yolov8n';
+  const customPath = document.getElementById('custom-model-path')?.value?.trim();
+
+  try {
+    const response = await API.post('/api/models/load', { model_id: modelId, model_path: customPath || undefined });
+    const selector = document.getElementById('custom-model-path');
+    if (selector) selector.value = response.model_path;
+    alert(`Model loaded: ${response.model_path}`);
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function startWebcam() {
+  const video = document.getElementById('webcam-video');
+  const canvas = document.getElementById('inference-canvas');
+  if (!video || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('Webcam is not available in this browser.');
+    return;
+  }
+
+  if (state.webcamTimer) {
+    clearInterval(state.webcamTimer);
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    video.srcObject = stream;
+    video.style.display = 'block';
+    video.onloadedmetadata = () => {
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 400;
+    };
+    video.play();
+    state.webcamTimer = setInterval(async () => {
+      if (!video || video.readyState < 2) return;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const selected = [...document.querySelectorAll('#class-filters input:checked')].map((input) => input.parentElement.querySelector('span').textContent);
+      const response = await runInference({
+        source_type: 'image',
+        image_data: canvas.toDataURL('image/jpeg', 0.8),
+        model_id: document.getElementById('inference-model-select')?.value || 'yolov8n',
+        model_path: document.getElementById('custom-model-path')?.value?.trim() || '',
+        classes: selected,
+        confidence: Number(document.getElementById('inference-threshold')?.value || 0.25),
+      });
+      renderInferenceResults(response);
+      drawDetectionsOnCanvas(response.result?.detections || []);
+    }, 2000);
+  } catch (error) {
+    alert(error.message || 'Could not access webcam');
+  }
+}
+
+function stopWebcam() {
+  if (state.webcamTimer) {
+    clearInterval(state.webcamTimer);
+    state.webcamTimer = null;
+  }
+  const video = document.getElementById('webcam-video');
+  if (video && video.srcObject) {
+    video.srcObject.getTracks().forEach((track) => track.stop());
+    video.srcObject = null;
+    video.style.display = 'none';
+  }
+}
+
+async function runDetection() {
+  const selected = [...document.querySelectorAll('#class-filters input:checked')].map((input) => input.parentElement.querySelector('span').textContent);
+  const fileInput = document.getElementById('image-upload');
+  const videoInput = document.getElementById('video-upload');
+  const modelId = document.getElementById('inference-model-select')?.value || 'yolov8n';
+  const customPath = document.getElementById('custom-model-path')?.value?.trim() || '';
+  const confidence = Number(document.getElementById('inference-threshold')?.value || 0.25);
+
+  try {
+    if (fileInput && fileInput.files[0]) {
+      const imageData = await readFileAsDataUrl(fileInput.files[0]);
+      const response = await runInference({
+        source_type: 'image',
+        image_data: imageData,
+        model_id: modelId,
+        model_path: customPath,
+        classes: selected,
+        confidence,
+      });
+      renderInferenceResults(response);
+      return;
+    }
+
+    if (videoInput && videoInput.files[0]) {
+      const videoData = await readFileAsDataUrl(videoInput.files[0]);
+      const response = await runInference({
+        source_type: 'video',
+        video_data: videoData,
+        model_id: modelId,
+        model_path: customPath,
+        classes: selected,
+        confidence,
+      });
+      renderInferenceResults(response);
+      return;
+    }
+
+    const response = await runInference({
+      model_id: modelId,
+      model_path: customPath,
+      classes: selected,
+      confidence,
+      source_type: 'image',
+      image_path: 'demo/sample.jpg',
+    });
+    renderInferenceResults(response);
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 async function renderExports() {
@@ -253,6 +417,7 @@ async function refreshData() {
     renderModels(state.models);
     renderDatasets(state.datasets);
     populateModelSelect(state.models);
+    populateInferenceModelSelect(state.models);
     renderClassFilters();
 
     if (state.currentJobId) {
@@ -269,6 +434,25 @@ function bindControls() {
   document.getElementById('refresh-button')?.addEventListener('click', refreshData);
   document.getElementById('start-training')?.addEventListener('click', startJob);
   document.getElementById('run-inference')?.addEventListener('click', runDetection);
+  document.getElementById('load-model-button')?.addEventListener('click', loadCustomModel);
+  document.getElementById('start-webcam')?.addEventListener('click', startWebcam);
+  document.getElementById('stop-webcam')?.addEventListener('click', stopWebcam);
+  const imageUpload = document.getElementById('image-upload');
+  const videoUpload = document.getElementById('video-upload');
+
+  imageUpload?.addEventListener('change', () => {
+    if (imageUpload.files?.length) {
+      const video = document.getElementById('video-upload');
+      if (video) video.value = '';
+    }
+  });
+
+  videoUpload?.addEventListener('change', () => {
+    if (videoUpload.files?.length) {
+      const image = document.getElementById('image-upload');
+      if (image) image.value = '';
+    }
+  });
 }
 
 async function initApp() {

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
-from .config import MODEL_DIR
+from .config import BASE_DIR, MODEL_DIR
 
 MODEL_CATALOG: List[Dict[str, Any]] = [
     {
@@ -106,9 +106,15 @@ MODEL_CATALOG: List[Dict[str, Any]] = [
 
 
 def _resolve_local_model_path(model_id: str) -> Path:
-    if model_id.endswith(".pt"):
-        return MODEL_DIR / Path(model_id).name
-    return MODEL_DIR / f"{model_id}.pt"
+    file_name = Path(model_id).name if model_id.endswith(".pt") else f"{model_id}.pt"
+    candidates = [
+        MODEL_DIR / file_name,
+        BASE_DIR / file_name,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 def list_models() -> List[Dict[str, Any]]:
@@ -130,7 +136,8 @@ def list_models() -> List[Dict[str, Any]]:
 def get_model_by_id(model_id: str) -> Dict[str, Any] | None:
     for model in MODEL_CATALOG:
         if model["id"] == model_id:
-            return model
+            resolved = _resolve_local_model_path(model_id)
+            return {**model, "local_path": str(resolved)}
     return None
 
 
