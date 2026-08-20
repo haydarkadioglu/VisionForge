@@ -2,6 +2,9 @@
 
 VisionForge is a desktop-style computer vision workspace for custom YOLO workflows. It combines a dashboard UI, dataset preparation, model management, annotation support, training orchestration, and live inference in one local application.
 
+>This project was developed as part of **LEVEL UP AI | ROKETSAN Artificial Intelligence Hackathon - AI Workshop Day 2**, under the **Görüntüden Karara – YOLO ile Akıllı Nesne Tespit ve Takip Sistemi** challenge.
+>Here is the partipicating certification: https://coderspace.io/sertifikalar/677a74ee-5678-4bf5-b169-9fe377c7a0e4
+
 ## Features
 
 - Model catalog with popular pretrained detectors
