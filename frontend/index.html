@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VisionForge</title>
+    <link rel="stylesheet" href="css/styles.css" />
+    <link rel="stylesheet" href="css/annotation.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">V</div>
+          <div>
+            <div class="brand-name">VisionForge</div>
+            <div class="brand-subtitle">Vision Lab</div>
+          </div>
+        </div>
+
+        <nav class="nav-menu">
+          <button class="nav-link active" data-page="dashboard">Dashboard</button>
+          <button class="nav-link" data-page="models">Models</button>
+          <button class="nav-link" data-page="dataset">Dataset</button>
+          <button class="nav-link" data-page="training">Training</button>
+          <button class="nav-link" data-page="inference">Inference</button>
+          <button class="nav-link" data-page="export">Export</button>
+        </nav>
+
+        <div class="sidebar-status">
+          <div class="status-pill">
+            <span class="status-dot"></span>
+            <span id="device-status">Checking device…</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Training workspace</p>
+            <h1>Computer Vision Control Center</h1>
+          </div>
+          <button class="primary-button" id="refresh-button">Refresh</button>
+        </header>
+
+        <section id="dashboard-page" class="page active">
+          <div id="dashboard-cards" class="cards-grid"></div>
+
+          <div class="panel-grid">
+            <div class="panel">
+              <div class="panel-header">
+                <h3>Training summary</h3>
+              </div>
+              <div id="training-summary" class="summary-block"></div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h3>System overview</h3>
+              </div>
+              <div id="system-overview" class="system-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="models-page" class="page hidden">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Model catalog</h3>
+            </div>
+            <div id="model-list" class="items-list"></div>
+          </div>
+        </section>
+
+        <section id="dataset-page" class="page hidden">
+          <div id="annotation-workspace"></div>
+          <div class="panel" style="margin-top: 16px;">
+            <div class="panel-header">
+              <h3>Dataset workspace</h3>
+            </div>
+            <div id="dataset-list" class="items-list"></div>
+          </div>
+        </section>
+
+        <section id="training-page" class="page hidden">
+          <div class="two-column">
+            <div class="panel">
+              <div class="panel-header">
+                <h3>Training configuration</h3>
+              </div>
+              <form id="training-form" class="form-grid">
+                <label>
+                  Model
+                  <select id="model-select"></select>
+                </label>
+                <label>
+                  Dataset path
+                  <input id="dataset-path" type="text" value="data/datasets" />
+                </label>
+                <label>
+                  Training mode
+                  <select id="training-mode">
+                    <option value="fine_tune">Fine-tune</option>
+                    <option value="from_scratch">From scratch</option>
+                  </select>
+                </label>
+                <label>
+                  Epochs
+                  <input id="epochs" type="number" value="10" min="1" max="300" />
+                </label>
+                <label>
+                  Batch size
+                  <input id="batch-size" type="number" value="8" min="1" max="64" />
+                </label>
+                <label>
+                  Image size
+                  <input id="image-size" type="number" value="640" min="320" max="1280" />
+                </label>
+                <label>
+                  Learning rate
+                  <input id="learning-rate" type="number" value="0.01" step="0.001" />
+                </label>
+                <label>
+                  Optimizer
+                  <select id="optimizer">
+                    <option value="auto">auto</option>
+                    <option value="AdamW">AdamW</option>
+                    <option value="SGD">SGD</option>
+                  </select>
+                </label>
+              </form>
+              <div class="form-actions">
+                <button class="primary-button" id="start-training">Start training</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h3>Live training progress</h3>
+              </div>
+              <div id="training-state" class="training-state"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="inference-page" class="page hidden">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Inference filters</h3>
+            </div>
+            <div id="class-filters" class="filter-list"></div>
+            <div class="form-actions">
+              <button class="primary-button" id="run-inference">Run detection</button>
+            </div>
+            <div id="inference-results" class="inference-results"></div>
+          </div>
+        </section>
+
+        <section id="export-page" class="page hidden">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Exported artifacts</h3>
+            </div>
+            <div id="export-list" class="items-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/router.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

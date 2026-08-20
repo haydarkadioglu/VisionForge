@@ -1,0 +1,73 @@
+.annotation-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 260px;
+  gap: 16px;
+  min-height: calc(100vh - 140px);
+}
+
+.annotation-sidebar,
+.annotation-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.annotation-canvas-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.annotation-toolbar {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.annotation-stage {
+  background: rgba(12, 20, 31, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 8px;
+  overflow: auto;
+}
+
+#annotation-canvas {
+  display: block;
+  max-width: 100%;
+  border-radius: 12px;
+  background: #020b13;
+}
+
+.class-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.class-pill {
+  background: rgba(19, 35, 53, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.class-pill.active {
+  border-color: rgba(97, 218, 251, 0.5);
+  background: rgba(97, 218, 251, 0.12);
+}
+
+.annotation-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (max-width: 1100px) {
+  .annotation-shell {
+    grid-template-columns: 1fr;
+  }
+}
