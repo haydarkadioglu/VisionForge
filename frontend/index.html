@@ -80,6 +80,7 @@
               <h3>Dataset workspace</h3>
             </div>
             <div id="dataset-list" class="items-list"></div>
+            <div id="dataset-class-summary" class="items-list" style="margin-top: 14px;"></div>
           </div>
         </section>
 
@@ -201,7 +202,24 @@
       </main>
     </div>
 
+    <div id="download-progress-modal" class="modal hidden" aria-live="polite">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Downloading model</h3>
+        </div>
+        <p id="download-progress-label">Preparing model download…</p>
+        <div class="download-progress-bar">
+          <span id="download-progress-fill"></span>
+        </div>
+        <div class="download-progress-meta">
+          <span id="download-progress-value">0%</span>
+          <span id="download-progress-status">Queued</span>
+        </div>
+      </div>
+    </div>
+
     <script src="js/api.js"></script>
+    <script src="js/annotation.js"></script>
     <script src="js/router.js"></script>
     <script src="js/app.js"></script>
   </body>

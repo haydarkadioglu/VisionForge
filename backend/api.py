@@ -132,9 +132,10 @@ def list_datasets():
 def validate_dataset():
     payload = request.get_json(silent=True) or {}
     dataset_path = payload.get("dataset_path") or str(DATASET_DIR)
-    classes = payload.get("classes") or []
-    yaml_path = ensure_yaml_for_dataset(dataset_path, classes or ["object"])
-    return jsonify({"dataset_path": dataset_path, "yaml_path": yaml_path, "status": "validated", "class_names": classes or ["object"]})
+    dataset_summary = scan_dataset(dataset_path)
+    classes = payload.get("classes") or dataset_summary.get("class_names") or ["object"]
+    yaml_path = ensure_yaml_for_dataset(dataset_path, classes)
+    return jsonify({"dataset_path": dataset_path, "yaml_path": yaml_path, "status": "validated", "class_names": classes})
 
 
 @app.route("/api/datasets/scan", methods=["POST"])

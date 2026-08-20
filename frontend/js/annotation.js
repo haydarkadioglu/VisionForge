@@ -1,8 +1,8 @@
 const annotationState = {
   imageIndex: 0,
   images: [],
-  classes: ['object'],
-  currentClass: 'object',
+  classes: ['person', 'vehicle', 'bottle', 'traffic sign'],
+  currentClass: 'person',
   currentBoxes: [],
   drawing: false,
   startX: 0,
@@ -137,8 +137,12 @@ async function scanDatasetFolder() {
   try {
     const response = await API.post('/api/datasets/scan', { folder_path: folder });
     const images = response.images || [];
+    const classNames = response.class_names || [];
     annotationState.images = images;
+    annotationState.classes = classNames.length ? classNames : annotationState.classes;
+    annotationState.currentClass = annotationState.classes[0] || 'person';
     annotationState.imageIndex = 0;
+    renderClassList();
     renderProgress();
     loadImageForAnnotation();
   } catch (error) {

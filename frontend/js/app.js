@@ -4,6 +4,7 @@ const state = {
   datasets: [],
   currentJobId: null,
   webcamTimer: null,
+  previewSource: null,
 };
 
 function setStatusText(text) {
@@ -78,11 +79,15 @@ function renderModels(models) {
     button.addEventListener('click', async () => {
       const modelId = button.dataset.modelId;
       try {
+        showDownloadProgress(modelId);
         const response = await API.post('/api/models/download', { model_id: modelId });
         const result = response.result || {};
-        alert(`Model ready: ${result.model_id} -> ${result.status}`);
+        updateDownloadProgress(100, 'Complete', `Model ready: ${result.model_id}`);
         await refreshData();
+        setTimeout(hideDownloadProgress, 1000);
       } catch (error) {
+        updateDownloadProgress(100, 'Failed', error.message || 'Download failed');
+        setTimeout(hideDownloadProgress, 1600);
         alert(error.message);
       }
     });
@@ -96,6 +101,7 @@ function renderDatasets(datasets) {
   const items = datasets.items || [];
   if (!items.length) {
     datasetList.innerHTML = '<p>No datasets detected yet. Add a folder under the data/datasets workspace.</p>';
+    renderDatasetClasses([]);
     return;
   }
 
@@ -103,9 +109,28 @@ function renderDatasets(datasets) {
     <div class="item">
       <div class="item-text">
         <strong>${dataset.dataset_path.split('/').pop() || 'Dataset'}</strong>
-        <span>${dataset.image_count} images • ${dataset.class_names.length} classes</span>
+        <span>${dataset.image_count} images • ${(dataset.class_names || []).length} classes</span>
       </div>
       <span class="badge ${dataset.status === 'ready' ? 'good' : 'warn'}">${dataset.status}</span>
+    </div>
+  `).join('');
+
+  const primaryDataset = items.find((dataset) => (dataset.class_names || []).length) || items[0];
+  renderDatasetClasses(primaryDataset?.class_names || []);
+}
+
+function renderDatasetClasses(classNames) {
+  const container = document.getElementById('dataset-class-summary');
+  if (!container) return;
+
+  const labels = Array.isArray(classNames) && classNames.length ? classNames : ['object'];
+  container.innerHTML = labels.map((label) => `
+    <div class="item">
+      <div class="item-text">
+        <strong>${label}</strong>
+        <span>Dataset label</span>
+      </div>
+      <span class="badge good">Active</span>
     </div>
   `).join('');
 }
@@ -190,14 +215,21 @@ async function pollTrainingStatus() {
   }
 }
 
+function getVisibleClasses() {
+  const datasetItems = state.datasets?.items || [];
+  const datasetClasses = datasetItems.flatMap((item) => item.class_names || []);
+  if (datasetClasses.length) {
+    return datasetClasses;
+  }
+
+  return ['person', 'vehicle', 'traffic sign', 'face', 'bottle'];
+}
+
 function renderClassFilters() {
   const container = document.getElementById('class-filters');
   if (!container) return;
 
-  const classes = state.datasets?.items?.[0]?.class_names?.length
-    ? state.datasets.items[0].class_names
-    : ['person', 'vehicle', 'traffic sign', 'face', 'bottle'];
-
+  const classes = getVisibleClasses();
   container.innerHTML = classes.map((label) => `
     <label>
       <span>${label}</span>
@@ -221,17 +253,37 @@ function renderInferenceResults(response) {
   results.innerHTML = detections || '<p>No detections for the selected classes.</p>';
 }
 
-function drawDetectionsOnCanvas(detections) {
+function drawDetectionsOnCanvas(detections, sourceImage = null) {
   const canvas = document.getElementById('inference-canvas');
   const ctx = canvas?.getContext('2d');
   if (!canvas || !ctx) return;
 
-  const image = document.getElementById('webcam-video');
-  if (image && image.readyState >= 2) {
+  const image = sourceImage || document.getElementById('webcam-video');
+  if (image instanceof HTMLImageElement && image.complete) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  } else if (image && image.readyState >= 2) {
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  } else if (state.previewSource) {
+    const previewImage = new Image();
+    previewImage.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(previewImage, 0, 0, canvas.width, canvas.height);
+      drawBoxOverlay(ctx, detections);
+    };
+    previewImage.src = state.previewSource;
+    return;
+  } else {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#020b13';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  detections.forEach((item) => {
+  drawBoxOverlay(ctx, detections);
+}
+
+function drawBoxOverlay(ctx, detections) {
+  (detections || []).forEach((item) => {
     const [x, y, width, height] = item.bbox || [0, 0, 0, 0];
     ctx.strokeStyle = '#61dafb';
     ctx.lineWidth = 2;
@@ -249,6 +301,34 @@ function readFileAsDataUrl(file) {
     reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
+}
+
+function showDownloadProgress(modelId) {
+  const modal = document.getElementById('download-progress-modal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  const fill = document.getElementById('download-progress-fill');
+  const value = document.getElementById('download-progress-value');
+  const status = document.getElementById('download-progress-status');
+  fill.style.width = '12%';
+  value.textContent = '12%';
+  status.textContent = `Downloading ${modelId}`;
+}
+
+function updateDownloadProgress(progress, label, statusText) {
+  const fill = document.getElementById('download-progress-fill');
+  const value = document.getElementById('download-progress-value');
+  const status = document.getElementById('download-progress-status');
+  const labelNode = document.getElementById('download-progress-label');
+  if (fill) fill.style.width = `${Math.min(progress, 100)}%`;
+  if (value) value.textContent = `${Math.min(progress, 100)}%`;
+  if (status) status.textContent = statusText || label || 'Processing';
+  if (labelNode) labelNode.textContent = label || 'Preparing model…';
+}
+
+function hideDownloadProgress() {
+  const modal = document.getElementById('download-progress-modal');
+  if (modal) modal.classList.add('hidden');
 }
 
 async function loadCustomModel() {
@@ -300,7 +380,7 @@ async function startWebcam() {
         confidence: Number(document.getElementById('inference-threshold')?.value || 0.25),
       });
       renderInferenceResults(response);
-      drawDetectionsOnCanvas(response.result?.detections || []);
+      drawDetectionsOnCanvas(response.result?.detections || [], video);
     }, 2000);
   } catch (error) {
     alert(error.message || 'Could not access webcam');
@@ -330,7 +410,21 @@ async function runDetection() {
 
   try {
     if (fileInput && fileInput.files[0]) {
-      const imageData = await readFileAsDataUrl(fileInput.files[0]);
+      const file = fileInput.files[0];
+      const imageData = await readFileAsDataUrl(file);
+      state.previewSource = imageData;
+      const previewImage = new Image();
+      previewImage.onload = () => {
+        const canvas = document.getElementById('inference-canvas');
+        const ctx = canvas?.getContext('2d');
+        if (canvas && ctx) {
+          canvas.width = previewImage.width || 640;
+          canvas.height = previewImage.height || 400;
+          ctx.drawImage(previewImage, 0, 0, canvas.width, canvas.height);
+        }
+      };
+      previewImage.src = imageData;
+
       const response = await runInference({
         source_type: 'image',
         image_data: imageData,
@@ -340,6 +434,7 @@ async function runDetection() {
         confidence,
       });
       renderInferenceResults(response);
+      drawDetectionsOnCanvas(response.result?.detections || [], previewImage);
       return;
     }
 
@@ -419,6 +514,7 @@ async function refreshData() {
     populateModelSelect(state.models);
     populateInferenceModelSelect(state.models);
     renderClassFilters();
+    renderDatasetClasses((state.datasets?.items || []).flatMap((item) => item.class_names || []));
 
     if (state.currentJobId) {
       const jobStatus = await getTrainingStatus(state.currentJobId);
@@ -457,6 +553,7 @@ function bindControls() {
 
 async function initApp() {
   bindControls();
+  initializeDatasetWorkspace();
   renderExports();
   await refreshData();
 }
