@@ -201,14 +201,25 @@ function navigateAnnotation(direction) {
 
 function loadImageForAnnotation() {
   const canvas = document.getElementById('annotation-canvas');
-  if (!canvas || !annotationState.images.length) return;
+  if (!canvas || !annotationState.images.length) {
+    const ctx = canvas?.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#020b13';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    return;
+  }
 
   const imagePath = annotationState.images[annotationState.imageIndex];
   const img = new Image();
   img.onload = () => {
     annotationState.currentImage = img;
-    canvas.width = img.width;
-    canvas.height = img.height;
+    const maxWidth = 920;
+    const maxHeight = 620;
+    const ratio = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+    canvas.width = Math.max(320, Math.round(img.width * ratio));
+    canvas.height = Math.max(220, Math.round(img.height * ratio));
     annotationState.draftBox = null;
     renderAnnotationCanvas();
     renderProgress();

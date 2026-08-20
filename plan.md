@@ -9,6 +9,13 @@
 - Live inference supports webcam, image, and video inputs with custom model loading.
 - Result preview now displays the uploaded image and uses a constrained viewport for inference display.
 
+## Latest improvements
+
+- Refined the training configuration panel with normalization, resize, and augmentation controls.
+- Added persistent app config for dataset path, model selection, and training defaults.
+- Fixed image preview scaling so uploaded files render without large viewport blowouts.
+- Added model export entry points and cleaner detection label handling for dataset-aware classes.
+
 ## Next priorities
 
 - Improve annotation tooling with stronger box editing and label persistence.

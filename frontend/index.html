@@ -130,9 +130,30 @@
                     <option value="SGD">SGD</option>
                   </select>
                 </label>
+                <label>
+                  Normalization
+                  <select id="normalization">
+                    <option value="auto">Auto</option>
+                    <option value="none">None</option>
+                    <option value="standard">Standard</option>
+                  </select>
+                </label>
+                <label>
+                  Resize
+                  <input id="resize" type="number" value="640" min="320" max="1280" step="32" />
+                </label>
+                <label>
+                  Augmentation
+                  <select id="augmentation">
+                    <option value="none">None</option>
+                    <option value="light">Light</option>
+                    <option value="moderate">Moderate</option>
+                  </select>
+                </label>
               </form>
               <div class="form-actions">
                 <button class="primary-button" id="start-training">Start training</button>
+                <button class="primary-button" id="export-model-button" style="margin-left: 10px;">Export model</button>
               </div>
             </div>
 

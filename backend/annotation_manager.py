@@ -16,20 +16,35 @@ class AnnotationManager:
     def scan_project(self, folder_path: str) -> Dict[str, Any]:
         base_path = Path(folder_path)
         images = []
+        class_names: List[str] = []
         if base_path.exists():
             images = sorted(
                 [
                     str(path)
-                    for path in base_path.iterdir()
+                    for path in base_path.rglob("*")
                     if path.is_file() and path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
                 ]
             )
+
+            yaml_path = base_path / "data.yaml"
+            if yaml_path.exists():
+                try:
+                    import yaml
+                    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+                    names = data.get("names") or []
+                    if isinstance(names, dict):
+                        class_names = [names[str(key)] for key in sorted(names.keys(), key=lambda x: int(x))]
+                    else:
+                        class_names = [str(item) for item in names]
+                except Exception:
+                    pass
 
         return {
             "folder_path": str(base_path),
             "exists": base_path.exists(),
             "image_count": len(images),
             "images": images[:25],
+            "class_names": class_names or ["object"],
             "status": "ready" if base_path.exists() else "not found",
         }
 

@@ -48,6 +48,14 @@ async function fetchExports() {
   return API.get('/api/export');
 }
 
+async function fetchConfig() {
+  return API.get('/api/config');
+}
+
+async function saveConfig(payload) {
+  return API.post('/api/config', payload);
+}
+
 async function runInference(payload) {
   return API.post('/api/inference', payload);
 }

@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 
 from .annotation_manager import AnnotationManager
-from .config import BASE_DIR, DATASET_DIR, EXPORT_DIR, FRONTEND_DIR, MODEL_DIR, RUN_DIR
+from .config import BASE_DIR, DATASET_DIR, EXPORT_DIR, FRONTEND_DIR, MODEL_DIR, RUN_DIR, load_app_config, save_app_config
 from .dataset_manager import ensure_yaml_for_dataset, list_registered_datasets, scan_dataset
 from .device_manager import detect_device
 from .model_manager import download_model, get_model_by_id, list_models
@@ -279,6 +279,33 @@ def inference_preview():
         })
     except Exception as exc:  # pragma: no cover - optional runtime dependency guard
         return jsonify({"error": str(exc), "status": "failed"}), 400
+
+
+@app.route("/api/config", methods=["GET", "POST"])
+def app_config():
+    if request.method == "GET":
+        return jsonify(load_app_config())
+
+    payload = request.get_json(silent=True) or {}
+    return jsonify(save_app_config(payload))
+
+
+@app.route("/api/model/export", methods=["POST"])
+def export_trained_model():
+    payload = request.get_json(silent=True) or {}
+    model_name = payload.get("model_name") or "best.pt"
+    candidates = sorted(RUN_DIR.rglob(model_name))
+    if not candidates:
+        fallback = sorted(RUN_DIR.rglob("*.pt"))
+        if not fallback:
+            return jsonify({"error": "No trained model checkpoint was found in data/runs."}), 404
+        candidates = fallback
+
+    source_path = Path(candidates[-1])
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    export_path = EXPORT_DIR / f"{source_path.parent.name}-{source_path.name}"
+    export_path.write_bytes(source_path.read_bytes())
+    return jsonify({"status": "exported", "source": str(source_path), "export_path": str(export_path)})
 
 
 @app.route("/api/export", methods=["GET"])

@@ -163,33 +163,73 @@ function renderTrainingState(stateData) {
   }
 
   const progress = Number(stateData.progress || 0);
+  const extractButton = stateData.status === 'completed'
+    ? '<button class="primary-button" id="extract-model-button" type="button">Extract model</button>'
+    : '';
   container.innerHTML = `
-    <div class="progress-wrap">
-      <div class="metric-row"><span>Status</span><strong>${stateData.status || 'queued'}</strong></div>
-      <div class="metric-row"><span>Epoch</span><strong>${stateData.epoch || 0} / ${stateData.total_epochs || 0}</strong></div>
-      <div class="metric-row"><span>Train loss</span><strong>${stateData.train_loss || 0}</strong></div>
-      <div class="metric-row"><span>val loss</span><strong>${stateData.val_loss || 0}</strong></div>
-      <div class="metric-row"><span>mAP</span><strong>${stateData.mAP || 0}</strong></div>
-      <div class="progress-bar"><span style="width: ${progress}%"></span></div>
-      <div class="metric-row"><span>ETA</span><strong>${stateData.eta || '--'}</strong></div>
-    </div>
+  <div class="progress-wrap">
+    <div class="metric-row"><span>Status</span><strong>${stateData.status || 'queued'}</strong></div>
+    <div class="metric-row"><span>Epoch</span><strong>${stateData.epoch || 0} / ${stateData.total_epochs || 0}</strong></div>
+    <div class="metric-row"><span>Train loss</span><strong>${stateData.train_loss || 0}</strong></div>
+    <div class="metric-row"><span>val loss</span><strong>${stateData.val_loss || 0}</strong></div>
+    <div class="metric-row"><span>mAP</span><strong>${stateData.mAP || 0}</strong></div>
+    <div class="progress-bar"><span style="width: ${progress}%"></span></div>
+    <div class="metric-row"><span>ETA</span><strong>${stateData.eta || '--'}</strong></div>
+    ${extractButton}
+  </div>
   `;
+  if (stateData.status === 'completed') {
+    document.getElementById('extract-model-button')?.addEventListener('click', async () => {
+      try {
+        const response = await API.post('/api/model/export', { model_name: 'best.pt' });
+        alert(`Exported model: ${response.export_path}`);
+        await renderExports();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+  }
+}
+
+async function saveTrainingConfig() {
+  const config = {
+    dataset_path: document.getElementById('dataset-path')?.value || 'data/datasets',
+    last_model_id: document.getElementById('model-select')?.value || 'yolov8n',
+    image_size: Number(document.getElementById('resize')?.value || document.getElementById('image-size')?.value || 640),
+    batch_size: Number(document.getElementById('batch-size')?.value || 8),
+    epochs: Number(document.getElementById('epochs')?.value || 10),
+    confidence: Number(document.getElementById('inference-threshold')?.value || 0.25),
+    normalization: document.getElementById('normalization')?.value || 'auto',
+    augmentation: document.getElementById('augmentation')?.value || 'none',
+    last_page: 'training',
+  };
+
+  try {
+    await saveConfig(config);
+  } catch (error) {
+    console.warn('Failed to save config', error);
+  }
 }
 
 async function startJob() {
   const model_id = document.getElementById('model-select').value;
   const datasetPath = document.getElementById('dataset-path').value || 'data/datasets';
+  const resizeValue = Number(document.getElementById('resize')?.value || document.getElementById('image-size')?.value || 640);
   const payload = {
     model_id,
     dataset_path: datasetPath,
     mode: document.getElementById('training-mode').value,
     epochs: Number(document.getElementById('epochs').value),
     batch_size: Number(document.getElementById('batch-size').value),
-    image_size: Number(document.getElementById('image-size').value),
+    image_size: resizeValue,
     learning_rate: Number(document.getElementById('learning-rate').value),
     optimizer: document.getElementById('optimizer').value,
     device: state.system?.device?.device || 'cpu',
+    normalization: document.getElementById('normalization')?.value || 'auto',
+    augmentation: document.getElementById('augmentation')?.value || 'none',
   };
+
+  await saveTrainingConfig();
 
   try {
     const response = await startTraining(payload);
@@ -229,8 +269,10 @@ function renderClassFilters() {
   const container = document.getElementById('class-filters');
   if (!container) return;
 
-  const classes = getVisibleClasses();
-  container.innerHTML = classes.map((label) => `
+  const classes = Array.from(new Set(getVisibleClasses().filter(Boolean)));
+  const labels = classes.length ? classes : ['object'];
+
+  container.innerHTML = labels.map((label) => `
     <label>
       <span>${label}</span>
       <input type="checkbox" checked />
@@ -497,10 +539,11 @@ async function initializeDatasetWorkspace() {
 
 async function refreshData() {
   try {
-    const [systemResponse, modelResponse, datasetResponse] = await Promise.all([
+    const [systemResponse, modelResponse, datasetResponse, configResponse] = await Promise.all([
       fetchSystem(),
       fetchModels(),
       fetchDatasets(),
+      fetchConfig(),
     ]);
 
     state.system = systemResponse;
@@ -516,6 +559,33 @@ async function refreshData() {
     renderClassFilters();
     renderDatasetClasses((state.datasets?.items || []).flatMap((item) => item.class_names || []));
 
+    if (configResponse?.dataset_path) {
+      const datasetPathInput = document.getElementById('dataset-path');
+      if (datasetPathInput && !datasetPathInput.value) datasetPathInput.value = configResponse.dataset_path;
+    }
+
+    if (configResponse?.last_model_id) {
+      const modelSelect = document.getElementById('model-select');
+      if (modelSelect && !modelSelect.value) modelSelect.value = configResponse.last_model_id;
+    }
+
+    if (configResponse?.image_size) {
+      const resizeInput = document.getElementById('resize');
+      if (resizeInput && !resizeInput.value) resizeInput.value = String(configResponse.image_size);
+      const imageSizeInput = document.getElementById('image-size');
+      if (imageSizeInput && !imageSizeInput.value) imageSizeInput.value = String(configResponse.image_size);
+    }
+
+    if (configResponse?.normalization) {
+      const normalizationInput = document.getElementById('normalization');
+      if (normalizationInput && !normalizationInput.value) normalizationInput.value = configResponse.normalization;
+    }
+
+    if (configResponse?.augmentation) {
+      const augmentationInput = document.getElementById('augmentation');
+      if (augmentationInput && !augmentationInput.value) augmentationInput.value = configResponse.augmentation;
+    }
+
     if (state.currentJobId) {
       const jobStatus = await getTrainingStatus(state.currentJobId);
       renderTrainingState(jobStatus);
@@ -526,6 +596,31 @@ async function refreshData() {
   }
 }
 
+function renderSelectedPreview(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const canvas = document.getElementById('inference-canvas');
+    const img = new Image();
+    img.onload = () => {
+      const context = canvas?.getContext('2d');
+      if (!canvas || !context) return;
+
+      const maxWidth = 760;
+      const maxHeight = 460;
+      const ratio = Math.min(maxWidth / (img.width || 1), maxHeight / (img.height || 1), 1);
+      canvas.width = Math.max(320, Math.round((img.width || 640) * ratio));
+      canvas.height = Math.max(220, Math.round((img.height || 400) * ratio));
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(img, 0, 0, canvas.width, canvas.height);
+      state.previewSource = reader.result;
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function bindControls() {
   document.getElementById('refresh-button')?.addEventListener('click', refreshData);
   document.getElementById('start-training')?.addEventListener('click', startJob);
@@ -533,6 +628,7 @@ function bindControls() {
   document.getElementById('load-model-button')?.addEventListener('click', loadCustomModel);
   document.getElementById('start-webcam')?.addEventListener('click', startWebcam);
   document.getElementById('stop-webcam')?.addEventListener('click', stopWebcam);
+
   const imageUpload = document.getElementById('image-upload');
   const videoUpload = document.getElementById('video-upload');
 
@@ -540,6 +636,7 @@ function bindControls() {
     if (imageUpload.files?.length) {
       const video = document.getElementById('video-upload');
       if (video) video.value = '';
+      renderSelectedPreview(imageUpload.files[0]);
     }
   });
 
@@ -547,6 +644,26 @@ function bindControls() {
     if (videoUpload.files?.length) {
       const image = document.getElementById('image-upload');
       if (image) image.value = '';
+    }
+  });
+
+  document.getElementById('extract-model-button')?.addEventListener('click', async () => {
+    try {
+      const response = await API.post('/api/model/export', { model_name: 'best.pt' });
+      alert(`Exported model: ${response.export_path}`);
+      await renderExports();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+
+  document.getElementById('export-model-button')?.addEventListener('click', async () => {
+    try {
+      const response = await API.post('/api/model/export', { model_name: 'best.pt' });
+      alert(`Exported model: ${response.export_path}`);
+      await renderExports();
+    } catch (error) {
+      alert(error.message);
     }
   });
 }
