@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.pt
+*.weights
+*.onnx
+*.cache
+.venv/
+venv/
+env/
+pythonenv*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment
+.env
+.env.*
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Operating system
+.DS_Store
+Thumbs.db
+
+# Generated project artifacts
+data/models/*
+data/exports/*
+data/runs/*
+data/datasets/*
+!data/models/.gitkeep
+!data/exports/.gitkeep
+!data/runs/.gitkeep
+!data/datasets/.gitkeep
+
+# Logs
+*.log
